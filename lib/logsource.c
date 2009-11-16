@@ -30,6 +30,9 @@
 #include "logmsg/tags.h"
 #include "ack_tracker.h"
 #include "timeutils/misc.h"
+#ifdef ATL_CHANGE
+#include "atlcounter.h"
+#endif /* ATL_CHANGE */
 
 #include <string.h>
 
@@ -373,6 +376,9 @@ log_source_queue(LogPipe *s, LogMessage *msg, const LogPathOptions *path_options
   msg_stats_update_counters(self->stats_id, msg);
 
   /* message setup finished, send it out */
+#ifdef ATL_CHANGE
+  atl_counter_increment_message (msg);
+#endif /* ATL_CHANGE */
 
   stats_counter_inc(self->recvd_messages);
   stats_counter_set(self->last_message_seen, msg->timestamps[LM_TS_RECVD].ut_sec);
