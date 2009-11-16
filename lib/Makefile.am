@@ -262,6 +262,12 @@ lib_libsyslog_ng_la_CFLAGS		= \
 	@UUID_CFLAGS@ $(libsystemd_CFLAGS)
 lib_libsyslog_ng_la_LIBADD		+= @OPENSSL_LIBS@ @UUID_LIBS@
 
+# ATL_CHANGE ->
+pkginclude_HEADERS += lib/atlcounter.h
+lib_libsyslog_ng_la_SOURCES += lib/atlcounter.c
+lib_libsyslog_ng_la_LIBADD += -lcntr
+# <- ATL_CHANGE
+
 # each line with closely related files (e.g. the ones generated from the same source)
 BUILT_SOURCES += lib/cfg-lex.c lib/cfg-lex.h						\
 	lib/cfg-grammar.c lib/cfg-grammar.h						\

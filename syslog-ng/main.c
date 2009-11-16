@@ -39,6 +39,9 @@
 #include "plugin.h"
 #include "reloc.h"
 #include "resolved-configurable-paths.h"
+#ifdef ATL_CHANGE
+#include "atlcounter.h"
+#endif /* ATL_CHANGE */
 
 #include <sys/types.h>
 #include <stdio.h>
@@ -296,10 +299,18 @@ main(int argc, char *argv[])
       log_stderr = FALSE;
     }
 
+#ifdef ATL_CHANGE
+  atl_counter_init ();
+#endif /* ATL_CHANGE */
+
   /* from now on internal messages are written to the system log as well */
 
   main_loop_run(main_loop);
   main_loop_deinit(main_loop);
+
+#ifdef ATL_CHANGE
+  atl_counter_deinit ();
+#endif /* ATL_CHANGE */
 
   app_shutdown();
   z_mem_trace_dump();
