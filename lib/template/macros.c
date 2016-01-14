@@ -50,6 +50,28 @@ LogMacroDef macros[] =
   { "TAGS", M_TAGS },
   { "BSDTAG", M_BSDTAG },
   { "PRI", M_PRI },
+#ifdef ATL_CHANGE
+  { "KERN", M_KERN },
+  { "USER", M_USER },
+  { "MAIL", M_MAIL },
+  { "DAEMON", M_DAEMON },
+  { "AUTH", M_AUTH },
+  { "SYSLOG", M_SYSLOG },
+  { "LPR", M_LPR },
+  { "NEWS", M_NEWS },
+  { "UUCP", M_UUCP },
+  { "CRON", M_CRON },
+  { "AUTHPRIV", M_AUTHPRIV },
+  { "FTP", M_FTP },
+  { "LOCAL0", M_LOCAL0 },
+  { "LOCAL1", M_LOCAL1 },
+  { "LOCAL2", M_LOCAL2 },
+  { "LOCAL3", M_LOCAL3 },
+  { "LOCAL4", M_LOCAL4 },
+  { "LOCAL5", M_LOCAL5 },
+  { "LOCAL6", M_LOCAL6 },
+  { "LOCAL7", M_LOCAL7 },
+#endif /* ATL_CHANGE */
 
   { "DATE",           M_DATE },
   { "FULLDATE",       M_FULLDATE },
@@ -177,7 +199,6 @@ LogMacroDef macros[] =
   { NULL, 0 }
 };
 
-
 static GTimeVal app_uptime;
 static GHashTable *macro_hash;
 static LogTemplateOptions template_options_for_macro_expand;
@@ -276,6 +297,108 @@ log_macro_expand(GString *result, gint id, gboolean escape, const LogTemplateOpt
       format_uint32_padded(result, 0, 0, 10, msg->pri);
       break;
     }
+#ifdef ATL_CHANGE
+    case M_KERN:
+    {
+      g_string_sprintfa(result, "%d", LOG_KERN | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_USER:
+    {
+      g_string_sprintfa(result, "%d", LOG_USER | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_MAIL:
+    {
+      g_string_sprintfa(result, "%d", LOG_MAIL | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_DAEMON:
+    {
+      g_string_sprintfa(result, "%d", LOG_DAEMON | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_AUTH:
+    {
+      g_string_sprintfa(result, "%d", LOG_AUTH | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_SYSLOG:
+    {
+      g_string_sprintfa(result, "%d", LOG_SYSLOG | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LPR:
+    {
+      g_string_sprintfa(result, "%d", LOG_LPR | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_NEWS:
+    {
+      g_string_sprintfa(result, "%d", LOG_NEWS | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_UUCP:
+    {
+      g_string_sprintfa(result, "%d", LOG_UUCP | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_CRON:
+    {
+      g_string_sprintfa(result, "%d", LOG_CRON | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_AUTHPRIV:
+    {
+      g_string_sprintfa(result, "%d", LOG_AUTHPRIV | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_FTP:
+    {
+      g_string_sprintfa(result, "%d", LOG_FTP | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL0:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL0 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL1:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL1 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL2:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL2 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL3:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL3 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL4:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL4 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL5:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL5 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL6:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL6 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+    case M_LOCAL7:
+    {
+      g_string_sprintfa(result, "%d", LOG_LOCAL7 | (msg->pri & LOG_PRIMASK));
+      break;
+    }
+#endif /* ATL_CHANGE */
     case M_HOST:
     {
       if (msg->flags & LF_CHAINED_HOSTNAME)
