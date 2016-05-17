@@ -32,6 +32,9 @@
 #include <openssl/x509v3.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
+#ifdef ATL_CHANGE
+#include <openssl/ocsp.h>
+#endif
 
 gboolean
 tls_get_x509_digest(X509 *x, GString *hash_string)
@@ -131,9 +134,253 @@ tls_session_verify_dn(X509_STORE_CTX *ctx)
   return match;
 }
 
+#ifdef ATL_CHANGE
+/*
+ * Check that the Extended Key Usage field is present in the certificate.
+ * It does not check the values in the field, which is handled already by
+ * openssl.  This just ensures that the value is present as required.
+ */
+int
+extendedkey_check(X509 *cert)
+{
+  int extNum;
+
+  STACK_OF(X509_EXTENSION) *exts = cert->cert_info->extensions;
+
+  int num_of_exts = 0;
+  if (exts)
+    {
+      num_of_exts = sk_X509_EXTENSION_num(exts);
+    }
+
+  /*
+   * Loop over all extensions and look for Extended Key Usage.
+   */
+  for (extNum = 0; extNum < num_of_exts; extNum++)
+  {
+    X509_EXTENSION *ext = sk_X509_EXTENSION_value(exts, extNum);
+    if (ext != NULL)
+      {
+        ASN1_OBJECT *obj = X509_EXTENSION_get_object(ext);
+        if (obj != NULL)
+          {
+            unsigned int nid = OBJ_obj2nid(obj);
+            if (nid == NID_ext_key_usage)
+              {
+                return 1;
+              }
+          }
+      }
+  }
+
+  return 0;
+}
+
+/*
+ * The following functionality (ocsp_parse_cert_url and ocsp_check)
+ * are taken from freeradius server rlm_eap_tls.c
+ */
+
+
+/*
+ * This function extracts the OCSP Responder URL from an existing x509
+ * certificate.
+ */
+static int
+ocsp_parse_cert_url(X509 *cert, char **phost, char **pport, char **ppath, int *pssl)
+{
+  int i;
+
+  AUTHORITY_INFO_ACCESS *aia;
+  ACCESS_DESCRIPTION *ad;
+
+  aia = X509_get_ext_d2i(cert, NID_info_access, NULL, NULL);
+
+  for (i = 0; i < sk_ACCESS_DESCRIPTION_num(aia); i++)
+    {
+      ad = sk_ACCESS_DESCRIPTION_value(aia, i);
+      if (OBJ_obj2nid(ad->method) == NID_ad_OCSP)
+        {
+          if (ad->location->type == GEN_URI)
+            {
+              if(OCSP_parse_url((char*)ad->location->d.ia5->data,
+                                phost, pport, ppath, pssl))
+                {
+                  return 1;
+                }
+            }
+        }
+    }
+
+  return 0;
+}
+
+/* Maximum leeway in validity period: default 5 minutes */
+#define MAX_VALIDITY_PERIOD     (5 * 60)
+
+typedef enum
+{
+  OCSP_NOT_PRESENT,
+  OCSP_INVALID,
+  OCSP_VALID,
+  OCSP_CONNECTION_FAILED,
+} OCSPCheckResult;
+
+/*
+ * Send an OCSP request to the OCSP responder (if set in the certificate)
+ * and validate the OCSP response.
+ * Returns:
+ * OCSP_NOT_PRESENT - No OCSP in certificate
+ * OCSP_INVALID - OCSP response indicates the certificate is not valid
+ * OCSP_VALID   - OCSP response says certficate is valid
+ * OCSP_CONNECTION_FAILED - Unable to connect to OCSP responder
+ *
+ */
+static OCSPCheckResult
+ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
+{
+  OCSP_CERTID *certid;
+  OCSP_REQUEST *req;
+  OCSP_RESPONSE *resp = NULL;
+  OCSP_BASICRESP *bresp = NULL;
+  char *host = NULL;
+  char *port = NULL;
+  char *path = NULL;
+  int use_ssl = -1;
+  long nsec = MAX_VALIDITY_PERIOD, maxage = -1;
+  BIO *cbio;
+  OCSPCheckResult ocsp_result = OCSP_INVALID;
+  int status ;
+  ASN1_GENERALIZEDTIME *rev, *thisupd, *nextupd;
+  int reason;
+
+  /* Get OCSP responder URL */
+  if (!ocsp_parse_cert_url(client_cert, &host, &port, &path, &use_ssl))
+    {
+      /* No OCSP to check */
+      msg_debug("[ocsp] No OCSP URL found in certificate", NULL);
+      return OCSP_NOT_PRESENT;
+    }
+
+  msg_verbose("[ocsp] ",
+              evt_tag_str("Host", host),
+              evt_tag_str("Port", port),
+              evt_tag_str("Path", path),
+              NULL);
+
+  /*
+   * Create OCSP Request
+   */
+  certid = OCSP_cert_to_id(NULL, client_cert, issuer_cert);
+  req = OCSP_REQUEST_new();
+  OCSP_request_add0_id(req, certid);
+  OCSP_request_add1_nonce(req, NULL, 8);
+
+  /*
+   * Send OCSP Request and get OCSP Response
+   */
+
+  /* Setup BIO socket to OCSP responder */
+  cbio = BIO_new_connect(host);
+
+  BIO_set_conn_port(cbio, port);
+  BIO_do_connect(cbio);
+
+  /* Send OCSP request and wait for response */
+  resp = OCSP_sendreq_bio(cbio, path, req);
+  if (resp==0)
+    {
+      msg_error("[ocsp] Couldn't get OCSP response", NULL);
+      ocsp_result = OCSP_CONNECTION_FAILED;
+      goto ocsp_end;
+    }
+
+  /* Verify OCSP response status */
+  status = OCSP_response_status(resp);
+  if (status != OCSP_RESPONSE_STATUS_SUCCESSFUL)
+    {
+      msg_error("[ocsp] ",
+                evt_tag_str("Response status", OCSP_response_status_str(status)), NULL);
+      ocsp_result = OCSP_CONNECTION_FAILED;
+      goto ocsp_end;
+    }
+  bresp = OCSP_response_get1_basic(resp);
+  if (bresp==0)
+    {
+      msg_verbose("[ocsp] Couldn't get basic resp", NULL);
+      goto ocsp_end;
+    }
+
+  if (OCSP_check_nonce(req, bresp)!=1)
+    {
+      msg_verbose("[ocsp] Response has wrong nonce value", NULL);
+      goto ocsp_end;
+    }
+
+  if (OCSP_basic_verify(bresp, NULL, store, 0)!=1)
+    {
+      msg_verbose("[ocsp] Couldn't verify basic response", NULL);
+      goto ocsp_end;
+    }
+
+  /*  Verify OCSP cert status */
+  if (!OCSP_resp_find_status(bresp, certid, &status, &reason, &rev, &thisupd, &nextupd))
+    {
+      msg_verbose("[ocsp] No Status found.", NULL);
+      goto ocsp_end;
+    }
+
+  if (!OCSP_check_validity(thisupd, nextupd, nsec, maxage))
+    {
+      msg_verbose("[ocsp] Status times invalid.", NULL);
+      goto ocsp_end;
+    }
+
+  if (V_OCSP_CERTSTATUS_GOOD == status)
+    {
+      msg_debug("[ocsp] Cert status: good", NULL);
+      ocsp_result = OCSP_VALID;
+    }
+  else
+    {
+      msg_verbose("[ocsp] ", evt_tag_int("Cert status", status), NULL);
+    }
+
+ocsp_end:
+  /* Free OCSP Stuff */
+  OCSP_REQUEST_free(req);
+  OCSP_RESPONSE_free(resp);
+  free(host);
+  free(port);
+  free(path);
+  BIO_free_all(cbio);
+  OCSP_BASICRESP_free(bresp);
+
+  if (1 == ocsp_result)
+    {
+      msg_verbose("[ocsp] Certificate is valid!", NULL);
+    }
+  else if (0 == ocsp_result)
+    {
+      msg_verbose("[ocsp] Certificate has been expired/revoked!", NULL);
+    }
+  else
+    {
+     msg_verbose("[ocsp] Unable to verify OCSP", NULL);
+    }
+
+  return ocsp_result;
+}
+#endif
+
 int
 tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
 {
+#ifdef ATL_CHANGE
+  X509 *client_cert;
+  X509 *issuer_cert;
+#endif
+
   /* untrusted means that we have to accept the certificate even if it is untrusted */
   if (self->ctx->verify_mode & TVM_UNTRUSTED)
     return 1;
@@ -153,6 +400,53 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
       X509_STORE_CTX_set_error(ctx, X509_V_ERR_INVALID_CA);
       return 0;
     }
+ 
+#ifdef ATL_CHANGE
+
+  /*
+   * This section adds 2 checks to the verify.
+   *
+   * 1) Reject the session if the Extended Key Usage field is not present in
+   *    the certificate.  The openssl code already verifies that the data in
+   *    the field is valid if present but it does not reject the connection if
+   *    the field is not present.  The field is required for Common Criteria.
+   *
+   * 2) If the certificate contains OCSP data then use that to check if the
+   *    certificate has been revoked.  If the OSCP responder cannot be
+   *    reached then we still allow the connection.  Only a successful
+   *    connection to the OCSP responder that indicates that the certificate
+   *    is not valid will cause the connection to not be allowed.
+   *
+   */
+
+  client_cert = X509_STORE_CTX_get_current_cert(ctx);
+
+  if (ctx->error_depth == 0)
+    {
+      if (!extendedkey_check(client_cert))
+        {
+          msg_error("Extended Key Usage check failed", NULL);
+          ctx->error = X509_V_ERR_INVALID_PURPOSE;
+          return 0;
+        }
+    }
+
+  if (X509_STORE_CTX_get1_issuer(&issuer_cert, ctx, client_cert)!=1)
+    {
+      msg_error("Failed to get issuer certificate for verification", NULL);
+      ctx->error = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT;
+      return 0;
+    }
+  else
+    {
+      if (ok && (ocsp_check(ctx->ctx, issuer_cert, client_cert) == OCSP_INVALID))
+        {
+          msg_error("OCSP check failed", NULL);
+          ctx->error = X509_V_ERR_CERT_REVOKED;
+          return 0;
+        }
+    }
+#endif
 
   /* reject certificate if it is valid, but its DN is not trusted */
   if (ok && ctx_error_depth == 0 && !tls_session_verify_dn(ctx))
