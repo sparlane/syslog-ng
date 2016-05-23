@@ -181,6 +181,33 @@ extendedkey_check(X509 *cert)
  * are taken from freeradius server rlm_eap_tls.c
  */
 
+/*
+ * This function gets the issuer certificate from a chain in the
+ * X509_STORE_CTX.  Used when the issuer is not in our trusterd store
+ * and was sent by the peer.
+ */
+static int
+find_issuer_from_chain (X509 **issuer, X509_STORE_CTX *ctx, X509 *cert)
+{
+  int i;
+  STACK_OF (X509) * chain = X509_STORE_CTX_get_chain (ctx);
+  if (chain == NULL)
+    {
+      return 0;
+    }
+
+  for (i = 0; i < sk_X509_num (chain); ++i)
+    {
+      X509 *cand = sk_X509_value (chain, i);
+      if ((X509_NAME_cmp (cand->cert_info->subject, cert->cert_info->issuer) == 0))
+        {
+          *issuer = cand;
+          return 1;
+        }
+    }
+
+  return 0;
+}
 
 /*
  * This function extracts the OCSP Responder URL from an existing x509
@@ -433,9 +460,12 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
 
   if (X509_STORE_CTX_get1_issuer(&issuer_cert, ctx, client_cert)!=1)
     {
-      msg_error("Failed to get issuer certificate for verification", NULL);
-      ctx->error = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT;
-      return 0;
+      if (find_issuer_from_chain (&issuer_cert, ctx, client_cert) != 1)
+        {
+          msg_error("Failed to get issuer certificate for verification", NULL);
+          ctx->error = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT;
+          return 0;
+        }
     }
   else
     {
