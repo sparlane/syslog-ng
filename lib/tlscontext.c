@@ -467,14 +467,12 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
           return 0;
         }
     }
-  else
+
+  if (ok && (ocsp_check(ctx->ctx, issuer_cert, client_cert) == OCSP_INVALID))
     {
-      if (ok && (ocsp_check(ctx->ctx, issuer_cert, client_cert) == OCSP_INVALID))
-        {
-          msg_error("OCSP check failed", NULL);
-          ctx->error = X509_V_ERR_CERT_REVOKED;
-          return 0;
-        }
+      msg_error("OCSP check failed", NULL);
+      ctx->error = X509_V_ERR_CERT_REVOKED;
+      return 0;
     }
 #endif
 
