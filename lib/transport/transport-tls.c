@@ -103,12 +103,38 @@ log_transport_tls_write_method(LogTransport *s, const gpointer buf, gsize buflen
   gint ssl_error;
   gint rc;
 
+#ifdef ATL_CHANGE
+  GString *subject_name;
+  X509* peer_cert;
+  int old_state = SSL_get_state(self->tls_session->ssl);
+#endif
+  
   /* assume that we need to poll our output for writing unless
    * SSL_ERROR_WANT_READ is specified by libssl */
 
   self->super.cond = G_IO_OUT;
 
   rc = SSL_write(self->tls_session->ssl, buf, buflen);
+
+#ifdef ATL_CHANGE
+  /* If we are transitioning to a connected state then output a syslog */
+  if ((SSL_ST_OK != old_state) && (SSL_ST_OK == SSL_get_state(self->tls_session->ssl)))
+    {
+      subject_name = g_string_sized_new(128);
+      peer_cert = SSL_get_peer_certificate(self->tls_session->ssl);
+      if(peer_cert)
+        {
+          tls_x509_format_dn(X509_get_subject_name(peer_cert), subject_name);
+        }
+      else
+        {
+          g_string_assign (subject_name, "UNKNOWN");
+        }
+      msg_notice ("Syslog-ng TLS session initiated",
+                  evt_tag_str("subject", subject_name->str));
+      g_string_free(subject_name, TRUE);
+    }
+#endif
 
   if (rc < 0)
     {
