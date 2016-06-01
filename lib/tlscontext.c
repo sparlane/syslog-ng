@@ -642,6 +642,24 @@ tls_session_new(SSL *ssl, TLSContext *ctx)
 void
 tls_session_free(TLSSession *self)
 {
+#ifdef ATL_CHANGE
+  GString *subject_name;
+  X509* peer_cert;
+  int state = SSL_get_state(self->ssl);
+
+  /* If we are transitioning from a good state then output a syslog */
+  if (SSL_ST_ERR != state)
+    {
+      subject_name = g_string_sized_new(128);
+      peer_cert = SSL_get_peer_certificate(self->ssl);
+      if(peer_cert)
+        {
+          tls_x509_format_dn(X509_get_subject_name(peer_cert), subject_name);
+          msg_notice ("TLS session ended", evt_tag_str("session", subject_name->str));
+        }
+      g_string_free(subject_name, TRUE);
+    }
+#endif
   tls_context_unref(self->ctx);
   if (self->verifier)
     tls_verifier_unref(self->verifier);
