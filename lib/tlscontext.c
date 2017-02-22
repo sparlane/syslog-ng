@@ -293,22 +293,21 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
        */
       if (ERR_peek_error())
         {
-          msg_error("[ocsp] Error parsing OCSP URL", NULL);
+          msg_error("Error parsing OCSP URL");
           return OCSP_INVALID;
         }
       else
         {
           /* No OCSP to check */
-          msg_error("[ocsp] No OCSP URL found in certificate", NULL);
+          msg_notice("No OCSP URL found in certificate");
           return OCSP_NOT_PRESENT;
         }
     }
 
-  msg_verbose("[ocsp] ",
+  msg_verbose("OSCP ",
               evt_tag_str("Host", host),
               evt_tag_str("Port", port),
-              evt_tag_str("Path", path),
-              NULL);
+              evt_tag_str("Path", path));
 
   subject_name = g_string_sized_new(128);
   tls_x509_format_dn(X509_get_subject_name(client_cert), subject_name);
@@ -335,7 +334,7 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
   resp = OCSP_sendreq_bio(cbio, path, req);
   if (resp==0)
     {
-      msg_error("[ocsp] Couldn't get OCSP response", NULL);
+      msg_error("Couldn't get OCSP response");
       ocsp_result = OCSP_CONNECTION_FAILED;
       goto ocsp_end;
     }
@@ -344,44 +343,44 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
   status = OCSP_response_status(resp);
   if (status != OCSP_RESPONSE_STATUS_SUCCESSFUL)
     {
-      msg_error("[ocsp] ",
-                evt_tag_str("Response status", OCSP_response_status_str(status)), NULL);
+      msg_error("OCSP ",
+                evt_tag_str("response status", OCSP_response_status_str(status)));
       ocsp_result = OCSP_CONNECTION_FAILED;
       goto ocsp_end;
     }
   bresp = OCSP_response_get1_basic(resp);
   if (bresp==0)
     {
-      msg_verbose("[ocsp] Couldn't get basic resp", NULL);
+      msg_warning("Couldn't get basic OCSP response");
       goto ocsp_end;
     }
 
   if (OCSP_check_nonce(req, bresp)!=1)
     {
-      msg_verbose("[ocsp] Response has wrong nonce value", NULL);
+      msg_warning("OCSP response has wrong nonce value");
       goto ocsp_end;
     }
 
   if (OCSP_basic_verify(bresp, NULL, store, 0)!=1)
     {
-      msg_verbose("[ocsp] Couldn't verify basic response", NULL);
+      msg_warning("Couldn't verify basic OCSP response");
       goto ocsp_end;
     }
 
   /*  Verify OCSP cert status */
   if (!OCSP_resp_find_status(bresp, certid, &status, &reason, &rev, &thisupd, &nextupd))
     {
-      msg_verbose("[ocsp] No Status found.", NULL);
+      msg_warning("No OCSP status found.");
       goto ocsp_end;
     }
 
   if (!OCSP_check_validity(thisupd, nextupd, nsec, maxage))
     {
-      msg_verbose("[ocsp] Status times invalid.", NULL);
+      msg_warning("OCSP status times invalid.");
       goto ocsp_end;
     }
 
-  msg_verbose("[ocsp] ", evt_tag_int("Cert status", status), NULL);
+  msg_info("OCSP ", evt_tag_int("cert status", status));
   if (V_OCSP_CERTSTATUS_REVOKED != status)
     {
       ocsp_result = OCSP_VALID;
@@ -390,19 +389,17 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
 ocsp_end:
   if (OCSP_VALID == ocsp_result)
     {
-      msg_verbose("[ocsp] Certificate is valid!", NULL);
+      msg_info("OCSP Certificate is valid!");
     }
   else if (OCSP_INVALID == ocsp_result)
     {
-      msg_verbose("[ocsp] Certificate has been expired/revoked!", NULL);
+      msg_error("OCSP Certificate has been expired/revoked!");
     }
   else
     {
-     msg_verbose("[ocsp] Unable to verify OCSP", NULL);
-
-     /* This won't prevent the connection but generate a log to indicate the condition */
-     syslog(LOG_AUTH | LOG_WARNING, "Syslog-ng unable to verify OCSP: %s (%s:%s%s)",
-            subject_name->str, host, port, path);
+      msg_error("Unable to verify certificate OCSP status",
+                evt_tag_str("subject" , subject_name->str),
+                evt_tag_printf("OCSP URI", "%s:%s%s", host, port, path));
     }
 
   /* Free OCSP Stuff */
@@ -471,7 +468,7 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
     {
       if (!extendedkey_check(client_cert))
         {
-          msg_error("Extended Key Usage check failed", NULL);
+          msg_error("Extended Key Usage check failed");
           ctx->error = X509_V_ERR_INVALID_PURPOSE;
           return 0;
         }
@@ -481,7 +478,7 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
     {
       if (find_issuer_from_chain (&issuer_cert, ctx, client_cert) != 1)
         {
-          msg_error("Failed to get issuer certificate for verification", NULL);
+          msg_error("Failed to get issuer certificate for verification");
           ctx->error = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT;
           return 0;
         }
@@ -489,7 +486,7 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
 
   if (ok && (ocsp_check(ctx->ctx, issuer_cert, client_cert) == OCSP_INVALID))
     {
-      msg_error("OCSP check failed", NULL);
+      msg_error("OCSP check failed");
       ctx->error = X509_V_ERR_CERT_REVOKED;
       return 0;
     }
