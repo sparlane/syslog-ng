@@ -284,9 +284,22 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
   /* Get OCSP responder URL */
   if (!ocsp_parse_cert_url(client_cert, &host, &port, &path, &use_ssl))
     {
-      /* No OCSP to check */
-      msg_debug("[ocsp] No OCSP URL found in certificate", NULL);
-      return OCSP_NOT_PRESENT;
+      /*
+       * Use peek to check if there is an error after parsing the OSCP
+       * url. This will not remove the error from the queue as this will
+       * get printed from log_transport_tls_write_method function
+       */
+      if (ERR_peek_error())
+        {
+          msg_error("[ocsp] Error parsing OCSP URL", NULL);
+          return OCSP_INVALID;
+        }
+      else
+        {
+          /* No OCSP to check */
+          msg_error("[ocsp] No OCSP URL found in certificate", NULL);
+          return OCSP_NOT_PRESENT;
+        }
     }
 
   msg_verbose("[ocsp] ",

@@ -101,12 +101,25 @@ afinet_dd_verify_callback(gint ok, X509_STORE_CTX *ctx, gpointer user_data)
   X509 *current_cert = X509_STORE_CTX_get_current_cert(ctx);
   X509 *cert = X509_STORE_CTX_get0_cert(ctx);
 
+#ifdef ATL_CHANGE
+  gint name_ok = TRUE;
+
+  /* We still need to log if SAN does not match properly, even if tls_session_verify
+   * function fails to return successfully. */
+  if (current_cert == cert && self->hostname
+      && (transport_mapper_inet->tls_context->verify_mode & TVM_TRUSTED))
+    {
+      name_ok = tls_verify_certificate_name(ctx->cert, self->hostname);
+    }
+
+  ok = ok && name_ok;
+#else
   if (ok && current_cert == cert && self->hostname
       && (transport_mapper_inet->tls_context->verify_mode & TVM_TRUSTED))
     {
       ok = tls_verify_certificate_name(cert, self->hostname);
     }
-
+#endif /* ATL_CHANGE */
   return ok;
 }
 
