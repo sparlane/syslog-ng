@@ -916,6 +916,107 @@ exit:
   return success;
 }
 
+#ifdef ATL_CHANGE
+static gboolean
+dns_label_valid(const char *label, size_t len)
+{
+  size_t index;
+  if (len == 0)
+    {
+      return FALSE;
+    }
+
+  for (index = 0; index < len; ++index)
+    {
+      char c = label[index];
+      /* A label may contain any alphanumeric, or a "-" if it's not the
+       * first character. */
+      if (!isalnum(c) && !((c == '-') && index > 0))
+        {
+          return FALSE;
+        }
+    }
+
+  return TRUE;
+}
+
+/**
+ * Check if the FQDN provided matches the specification.  The specification
+ * may be a specific FQDN, or it may contain a wildcard ('*') as the first
+ * label (field).  The spec and the FQDN must have the same number of
+ * dot-delimited labels.
+ */
+static gboolean
+dns_wildcard_match(const char *spec, size_t spec_len, const char *fqdn)
+{
+  const char *spec_pos = spec;
+  const char *fqdn_pos = fqdn;
+
+  const char *spec_label_start = spec;
+  const char *fqdn_label_start = fqdn;
+
+  while (1)
+    {
+      /* Search both the spec and the fqdn for a character terminating
+       * the label ('.') until the end of the string. */
+      while ((*spec_pos != '.') && (spec_pos - spec < spec_len))
+        {
+          ++spec_pos;
+        }
+
+      while ((*fqdn_pos != '.') && (*fqdn_pos != '\0'))
+        {
+          ++fqdn_pos;
+        }
+
+      /* See if we're at the end of the string for each */
+      int spec_eos = (spec_pos - spec >= spec_len) ? 1 : 0;
+      int fqdn_eos = (*fqdn_pos == '\0') ? 1 : 0;
+
+      /* Check if different # of labels */
+      if (spec_eos != fqdn_eos)
+        {
+          return FALSE;
+        }
+
+      size_t spec_label_len = spec_pos - spec_label_start;
+      size_t fqdn_label_len = fqdn_pos - fqdn_label_start;
+
+      if (!dns_label_valid(fqdn_label_start, fqdn_label_len))
+        {
+          return FALSE;
+        }
+
+      /* Compare label, unless the first spec label is a wildcard */
+      if ((spec_label_len != 1) || (*spec_label_start != '*') || (spec_label_start != spec))
+        {
+          /* Field length mismatch */
+          if (spec_label_len != fqdn_label_len)
+            {
+              return FALSE;
+            }
+
+          /* Label content mismatch */
+          if (strncasecmp(spec_label_start, fqdn_label_start, spec_label_len))
+            {
+              return FALSE;
+            }
+        }
+
+      /* Matched; continue unless it's the end of the string */
+      if (*spec_pos == '\0')
+        {
+          return TRUE;
+        }
+
+      fqdn_label_start = ++fqdn_pos;
+      spec_label_start = ++spec_pos;
+    }
+
+  return FALSE;
+}
+#endif
+
 gboolean
 tls_verify_certificate_name(X509 *cert, const gchar *host_name)
 {
@@ -956,9 +1057,15 @@ tls_verify_certificate_name(X509 *cert, const gchar *host_name)
 
                   memcpy(pattern_buf, dnsname, dnsname_len);
                   pattern_buf[dnsname_len] = 0;
+
                   /* we have found a DNS name as alternative subject name */
                   found = TRUE;
+#ifdef ATL_CHANGE
+                  result = dns_wildcard_match(pattern_buf, dnsname_len, host_name);
+#else
+
                   result = tls_wildcard_match(host_name, pattern_buf);
+#endif
                 }
               else if (gen_name->type == GEN_IPADD)
                 {
@@ -969,6 +1076,13 @@ tls_verify_certificate_name(X509 *cert, const gchar *host_name)
                   result = strcasecmp(host_name, pattern_buf) == 0;
                 }
             }
+
+#ifdef ATL_CHANGE
+          if (found && !result)
+            {
+              msg_error("no certificate subjectAltName matching", evt_tag_str("hostname", host_name));
+            }
+#endif
           sk_GENERAL_NAME_free(alt_names);
         }
     }
@@ -981,7 +1095,15 @@ tls_verify_certificate_name(X509 *cert, const gchar *host_name)
       name = X509_get_subject_name(cert);
       if (X509_NAME_get_text_by_NID(name, NID_commonName, pattern_buf, sizeof(pattern_buf)) != -1)
         {
+#ifdef ATL_CHANGE
+          result = dns_wildcard_match(pattern_buf, strlen(pattern_buf), host_name);
+          if (!result)
+            {
+              msg_error("CN does not match", evt_tag_str("host", host_name));
+            }
+#else
           result = tls_wildcard_match(host_name, pattern_buf);
+#endif
         }
     }
   if (!result)
