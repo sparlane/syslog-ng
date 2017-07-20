@@ -33,6 +33,7 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #ifdef ATL_CHANGE
+#include <syslog.h>
 #include <openssl/ocsp.h>
 #endif
 
@@ -280,6 +281,7 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
   int status ;
   ASN1_GENERALIZEDTIME *rev, *thisupd, *nextupd;
   int reason;
+  GString *subject_name;
 
   /* Get OCSP responder URL */
   if (!ocsp_parse_cert_url(client_cert, &host, &port, &path, &use_ssl))
@@ -307,6 +309,9 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
               evt_tag_str("Port", port),
               evt_tag_str("Path", path),
               NULL);
+
+  subject_name = g_string_sized_new(128);
+  tls_x509_format_dn(X509_get_subject_name(client_cert), subject_name);
 
   /*
    * Create OCSP Request
@@ -376,18 +381,32 @@ ocsp_check(X509_STORE *store, X509 *issuer_cert, X509 *client_cert)
       goto ocsp_end;
     }
 
-  if (V_OCSP_CERTSTATUS_GOOD == status)
+  msg_verbose("[ocsp] ", evt_tag_int("Cert status", status), NULL);
+  if (V_OCSP_CERTSTATUS_REVOKED != status)
     {
-      msg_debug("[ocsp] Cert status: good", NULL);
       ocsp_result = OCSP_VALID;
-    }
-  else
-    {
-      msg_verbose("[ocsp] ", evt_tag_int("Cert status", status), NULL);
     }
 
 ocsp_end:
+  if (OCSP_VALID == ocsp_result)
+    {
+      msg_verbose("[ocsp] Certificate is valid!", NULL);
+    }
+  else if (OCSP_INVALID == ocsp_result)
+    {
+      msg_verbose("[ocsp] Certificate has been expired/revoked!", NULL);
+    }
+  else
+    {
+     msg_verbose("[ocsp] Unable to verify OCSP", NULL);
+
+     /* This won't prevent the connection but generate a log to indicate the condition */
+     syslog(LOG_AUTH | LOG_WARNING, "Syslog-ng unable to verify OCSP: %s (%s:%s%s)",
+            subject_name->str, host, port, path);
+    }
+
   /* Free OCSP Stuff */
+  g_string_free(subject_name, TRUE);
   OCSP_REQUEST_free(req);
   OCSP_RESPONSE_free(resp);
   free(host);
@@ -395,19 +414,6 @@ ocsp_end:
   free(path);
   BIO_free_all(cbio);
   OCSP_BASICRESP_free(bresp);
-
-  if (1 == ocsp_result)
-    {
-      msg_verbose("[ocsp] Certificate is valid!", NULL);
-    }
-  else if (0 == ocsp_result)
-    {
-      msg_verbose("[ocsp] Certificate has been expired/revoked!", NULL);
-    }
-  else
-    {
-     msg_verbose("[ocsp] Unable to verify OCSP", NULL);
-    }
 
   return ocsp_result;
 }
