@@ -129,6 +129,7 @@ detect_local_fqdn_hostname(void)
   gchar *hostname;
 
   hostname = get_local_hostname_from_system();
+#ifndef ATL_CHANGE
   if (!is_hostname_fqdn(hostname))
     {
       /* not fully qualified, resolve it using DNS or /etc/hosts */
@@ -146,6 +147,7 @@ detect_local_fqdn_hostname(void)
             }
         }
     }
+#endif
 
   g_strlcpy(local_hostname_fqdn, hostname, sizeof(local_hostname_fqdn));
   g_free(hostname);
