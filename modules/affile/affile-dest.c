@@ -35,6 +35,7 @@
 #include "transport/transport-pipe.h"
 #include "compat/lfs.h"
 #include "logwriter.h"
+#include "apphook.h"
 
 #include <iv.h>
 #include <sys/types.h>
@@ -85,6 +86,8 @@
  * protection of the lock, keeping a the next pipe alive, even if that would
  * go away in a parallel reaper process.
  */
+
+static GList *affile_dest_drivers = NULL;
 
 struct _AFFileDestWriter
 {
@@ -189,7 +192,8 @@ affile_dw_reopen(AFFileDestWriter *self)
                                            self->owner->writer_options.flush_lines,
                                            self->owner->use_fsync);
 
-      main_loop_call((void *(*)(void *)) affile_dw_arm_reaper, self, TRUE);
+      if (!iv_timer_registered(&self->reap_timer))
+        main_loop_call((void *(*)(void *)) affile_dw_arm_reaper, self, TRUE);
     }
   else
     {
@@ -364,6 +368,29 @@ affile_dw_new(const gchar *filename, GlobalConfig *cfg)
   self->filename = g_strdup(filename);
   g_static_mutex_init(&self->lock);
   return self;
+}
+
+static void
+affile_dw_reopen_writer(gpointer key, gpointer value, gpointer user_data)
+{
+  AFFileDestWriter *writer = (AFFileDestWriter *) value;
+  affile_dw_reopen(writer);
+}
+
+static void
+affile_dd_reopen_all_writers(gpointer data, gpointer user_data)
+{
+  AFFileDestDriver *driver = (AFFileDestDriver *) data;
+  if (driver->single_writer)
+    affile_dw_reopen(driver->single_writer);
+  else if (driver->writer_hash)
+    g_hash_table_foreach(driver->writer_hash, affile_dw_reopen_writer, NULL);
+}
+
+static void
+affile_dd_register_reopen_hook(gint hook_type, gpointer user_data)
+{
+  g_list_foreach(affile_dest_drivers, affile_dd_reopen_all_writers, NULL);
 }
 
 void
@@ -733,6 +760,7 @@ affile_dd_free(LogPipe *s)
   AFFileDestDriver *self = (AFFileDestDriver *) s;
 
   g_static_mutex_free(&self->lock);
+  affile_dest_drivers = g_list_remove(affile_dest_drivers, self);
 
   /* NOTE: this must be NULL as deinit has freed it, otherwise we'd have circular references */
   g_assert(self->single_writer == NULL && self->writer_hash == NULL);
@@ -768,6 +796,9 @@ affile_dd_new_instance(gchar *filename, GlobalConfig *cfg)
   self->file_open_options.needs_privileges = FALSE;
   self->file_open_options.open_flags = DEFAULT_DW_REOPEN_FLAGS;
   g_static_mutex_init(&self->lock);
+
+  affile_dest_drivers = g_list_append(affile_dest_drivers, self);
+
   return self;
 }
 
@@ -785,4 +816,10 @@ afpipe_dd_new(gchar *filename, GlobalConfig *cfg)
   self->file_open_options.open_flags = DEFAULT_DW_REOPEN_FLAGS_PIPE;
 
   return &self->super.super;
+}
+
+void
+affile_dd_global_init(void)
+{
+  register_application_hook(AH_REOPEN, affile_dd_register_reopen_hook, NULL);
 }
