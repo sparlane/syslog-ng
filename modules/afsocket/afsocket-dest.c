@@ -384,8 +384,6 @@ afsocket_dd_restore_writer(AFSocketDestDriver *self)
   GlobalConfig *cfg;
   ReloadStoreItem *item;
 
-  g_assert(self->writer == NULL);
-
   cfg = log_pipe_get_config(&self->super.super.super);
   item = cfg_persist_config_fetch(cfg, afsocket_dd_format_connections_name(self));
 
