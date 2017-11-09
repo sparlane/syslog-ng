@@ -216,10 +216,10 @@ log_writer_work_finished(gpointer s)
       log_writer_broken(self, NC_WRITE_ERROR);
       if (self->proto)
         {
-          log_writer_suspend(self);
           msg_notice("Suspending write operation because of an I/O error",
                      evt_tag_int("fd", log_proto_client_get_fd(self->proto)),
                      evt_tag_int("time_reopen", self->options->time_reopen));
+          log_writer_suspend(self);
         }
       goto exit;
     }
