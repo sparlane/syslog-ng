@@ -604,6 +604,9 @@ cfg_lexer_include_file(CfgLexer *self, const gchar *filename_)
   filename = find_file_in_path(cfg_args_get(self->globals, "include-path"), filename_, G_FILE_TEST_EXISTS);
   if (!filename || stat(filename, &st) < 0)
     {
+      if (filename)
+        g_free(filename);
+
       if (cfg_lexer_include_file_glob(self, filename_))
         return TRUE;
 
