@@ -55,6 +55,9 @@ typedef enum
 } TLSSslOptions;
 
 typedef gint (*TLSSessionVerifyFunc)(gint ok, X509_STORE_CTX *ctx, gpointer user_data);
+#ifdef ATL_CHANGE
+typedef gpointer (*TLSSessionVerifyDataRefFunc)(gpointer verify_data);
+#endif /* ATL_CHANGE */
 typedef struct _TLSContext TLSContext;
 
 #define X509_MAX_CN_LEN 64
@@ -77,7 +80,12 @@ typedef struct _TLSSession
   } peer_info;
 } TLSSession;
 
+#ifdef ATL_CHANGE
+void tls_session_set_verify(TLSSession *self, TLSSessionVerifyFunc verify_func, gpointer verify_data, GDestroyNotify verify_destroy,
+                            TLSSessionVerifyDataRefFunc verify_data_ref_func);
+#else /* ATL_CHANGE */
 void tls_session_set_verify(TLSSession *self, TLSSessionVerifyFunc verify_func, gpointer verify_data, GDestroyNotify verify_destroy);
+#endif /* ATL_CHANGE */
 void tls_session_free(TLSSession *self);
 
 struct _TLSContext

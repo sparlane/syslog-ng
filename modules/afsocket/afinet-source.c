@@ -59,7 +59,11 @@ afinet_sd_set_tls_context(LogDriver *s, TLSContext *tls_context)
 {
   AFInetSourceDriver *self = (AFInetSourceDriver *) s;
 
+#ifdef ATL_CHANGE
+  transport_mapper_inet_set_tls_context((TransportMapperInet *) self->super.transport_mapper, tls_context, NULL, NULL, NULL, NULL);
+#else /* ATL_CHANGE */
   transport_mapper_inet_set_tls_context((TransportMapperInet *) self->super.transport_mapper, tls_context, NULL, NULL);
+#endif /* ATL_CHANGE */
 }
 
 static gboolean

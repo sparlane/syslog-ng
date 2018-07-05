@@ -571,6 +571,16 @@ tls_session_set_trusted_dn(TLSContext *self, GList *dn)
   self->trusted_dn_list = dn;
 }
 
+#ifdef ATL_CHANGE
+void
+tls_session_set_verify(TLSSession *self, TLSSessionVerifyFunc verify_func, gpointer verify_data,
+                       GDestroyNotify verify_destroy, TLSSessionVerifyDataRefFunc verify_data_ref_func)
+{
+  self->verify_func = verify_func;
+  self->verify_data = verify_data_ref_func ? verify_data_ref_func(verify_data) : verify_data;
+  self->verify_data_destroy = verify_destroy;
+}
+#else /* ATL_CHANGE */
 void
 tls_session_set_verify(TLSSession *self, TLSSessionVerifyFunc verify_func, gpointer verify_data,
                        GDestroyNotify verify_destroy)
@@ -579,6 +589,7 @@ tls_session_set_verify(TLSSession *self, TLSSessionVerifyFunc verify_func, gpoin
   self->verify_data = verify_data;
   self->verify_data_destroy = verify_destroy;
 }
+#endif /* ATL_CHANGE */
 
 void
 tls_session_info_callback(const SSL *ssl, int where, int ret)
@@ -611,7 +622,11 @@ tls_session_new(SSL *ssl, TLSContext *ctx)
   self->ctx = ctx;
 
   /* to set verify callback */
+#ifdef ATL_CHANGE
+  tls_session_set_verify(self, NULL, NULL, NULL, NULL);
+#else /* ATL_CHANGE */
   tls_session_set_verify(self, NULL, NULL, NULL);
+#endif
 
   SSL_set_info_callback(ssl, tls_session_info_callback);
 

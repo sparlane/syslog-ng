@@ -95,7 +95,12 @@ transport_mapper_inet_construct_log_transport(TransportMapper *s, gint fd)
       if (!tls_session)
         return NULL;
 
+#ifdef ATL_CHANGE
+      tls_session_set_verify(tls_session, self->tls_verify_callback, self->tls_verify_data,
+                             self->tls_verify_data_destroy, self->tls_verify_data_ref);
+#else /* ATL_CHANGE */
       tls_session_set_verify(tls_session, self->tls_verify_callback, self->tls_verify_data, NULL);
+#endif /* ATL_CHANGE */
       return log_transport_tls_new(tls_session, fd);
     }
   else

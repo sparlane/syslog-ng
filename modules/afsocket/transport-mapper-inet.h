@@ -37,6 +37,10 @@ typedef struct _TransportMapperInet
   TLSContext *tls_context;
   TLSSessionVerifyFunc tls_verify_callback;
   gpointer tls_verify_data;
+#ifdef ATL_CHANGE
+  TLSSessionVerifyDataRefFunc tls_verify_data_ref;
+  GDestroyNotify tls_verify_data_destroy;
+#endif /* ATL_CHANGE */
 } TransportMapperInet;
 
 static inline gint
@@ -53,6 +57,19 @@ transport_mapper_inet_get_port_change_warning(TransportMapper *s)
   return self->server_port_change_warning;
 }
 
+#ifdef ATL_CHANGE
+static inline void
+transport_mapper_inet_set_tls_context(TransportMapperInet *self, TLSContext *tls_context, TLSSessionVerifyFunc tls_verify_callback,
+                                      gpointer tls_verify_data, GDestroyNotify tls_verify_data_destroy,
+                                      TLSSessionVerifyDataRefFunc tls_verify_data_ref_func)
+{
+  self->tls_context = tls_context;
+  self->tls_verify_callback = tls_verify_callback;
+  self->tls_verify_data = tls_verify_data;
+  self->tls_verify_data_destroy = tls_verify_data_destroy;
+  self->tls_verify_data_ref = tls_verify_data_ref_func;
+}
+#else /* ATL_CHANGE */
 static inline void
 transport_mapper_inet_set_tls_context(TransportMapperInet *self, TLSContext *tls_context, TLSSessionVerifyFunc tls_verify_callback, gpointer tls_verify_data)
 {
@@ -60,6 +77,7 @@ transport_mapper_inet_set_tls_context(TransportMapperInet *self, TLSContext *tls
   self->tls_verify_callback = tls_verify_callback;
   self->tls_verify_data = tls_verify_data;
 }
+#endif /* ATL_CHANGE */
 
 void transport_mapper_inet_init_instance(TransportMapperInet *self, const gchar *transport);
 TransportMapper *transport_mapper_tcp_new(void);

@@ -123,12 +123,37 @@ afinet_dd_verify_callback(gint ok, X509_STORE_CTX *ctx, gpointer user_data)
   return ok;
 }
 
+static gpointer
+afinet_dd_verify_data_ref(gpointer verify_data)
+{
+  if (verify_data)
+    {
+      return log_pipe_ref((LogPipe *)verify_data);
+    }
+  return NULL;
+}
+
+static void
+afinet_dd_verify_data_destroy(gpointer verify_data)
+{
+  if (verify_data)
+    {
+      log_pipe_unref((LogPipe *)verify_data);
+    }
+}
+
 void
 afinet_dd_set_tls_context(LogDriver *s, TLSContext *tls_context)
 {
   AFInetDestDriver *self = (AFInetDestDriver *) s;
+#ifdef ATL_CHANGE
+  transport_mapper_inet_set_tls_context((TransportMapperInet *) self->super.transport_mapper, tls_context,
+                                        afinet_dd_verify_callback, self, afinet_dd_verify_data_destroy,
+                                        afinet_dd_verify_data_ref);
+#else /* ATL_CHANGE */
   transport_mapper_inet_set_tls_context((TransportMapperInet *) self->super.transport_mapper, tls_context,
                                         afinet_dd_verify_callback, self);
+#endif /* ATL_CHANGE */
 }
 
 static LogWriter *
