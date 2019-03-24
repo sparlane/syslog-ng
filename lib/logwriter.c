@@ -325,9 +325,12 @@ log_writer_error_suspend_elapsed(gpointer s)
   LogWriter *self = (LogWriter *) s;
 
   self->suspended = FALSE;
-  msg_notice("Error suspend timeout has elapsed, attempting to write again",
-             evt_tag_int("fd", log_proto_client_get_fd(self->proto)));
-  log_writer_start_watches(self);
+  if (self->proto)
+    {
+      msg_notice("Error suspend timeout has elapsed, attempting to write again",
+                 evt_tag_int("fd", log_proto_client_get_fd(self->proto)));
+      log_writer_start_watches(self);
+    }
 }
 
 static void
