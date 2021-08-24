@@ -203,27 +203,22 @@ extendedkey_check(X509 *cert)
 
 /*
  * This function gets the issuer certificate from a chain in the
- * X509_STORE_CTX.  Used when the issuer is not in our trusterd store
+ * X509_STORE_CTX.  Used when the issuer is not in our trusted store
  * and was sent by the peer.
  */
 static int
 find_issuer_from_chain (X509 **issuer, X509_STORE_CTX *ctx, X509 *cert)
 {
-  int i;
-  STACK_OF (X509) * chain = X509_STORE_CTX_get_chain (ctx);
+  STACK_OF (X509) *chain = X509_STORE_CTX_get0_chain (ctx);
   if (chain == NULL)
     {
       return 0;
     }
 
-  for (i = 0; i < sk_X509_num (chain); ++i)
+  *issuer = X509_find_by_subject(chain, X509_get_issuer_name (cert));
+  if (*issuer)
     {
-      X509 *cand = sk_X509_value (chain, i);
-      if ((X509_NAME_cmp (cand->cert_info->subject, cert->cert_info->issuer) == 0))
-        {
-          *issuer = cand;
-          return 1;
-        }
+      return 1;
     }
 
   return 0;
