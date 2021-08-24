@@ -189,36 +189,10 @@ tls_session_verify_dn(X509_STORE_CTX *ctx)
 int
 extendedkey_check(X509 *cert)
 {
-  int extNum;
-
-  STACK_OF(X509_EXTENSION) *exts = cert->cert_info->extensions;
-
-  int num_of_exts = 0;
-  if (exts)
+  if (X509_get_ext_d2i(cert, NID_ext_key_usage, NULL, NULL))
     {
-      num_of_exts = sk_X509_EXTENSION_num(exts);
+      return 1;
     }
-
-  /*
-   * Loop over all extensions and look for Extended Key Usage.
-   */
-  for (extNum = 0; extNum < num_of_exts; extNum++)
-  {
-    X509_EXTENSION *ext = sk_X509_EXTENSION_value(exts, extNum);
-    if (ext != NULL)
-      {
-        ASN1_OBJECT *obj = X509_EXTENSION_get_object(ext);
-        if (obj != NULL)
-          {
-            unsigned int nid = OBJ_obj2nid(obj);
-            if (nid == NID_ext_key_usage)
-              {
-                return 1;
-              }
-          }
-      }
-  }
-
   return 0;
 }
 
@@ -469,12 +443,12 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
 
   client_cert = X509_STORE_CTX_get_current_cert(ctx);
 
-  if (ctx->error_depth == 0)
+  if (X509_STORE_CTX_get_error_depth(ctx) == 0)
     {
       if (!extendedkey_check(client_cert))
         {
           msg_error("Extended Key Usage check failed", NULL);
-          ctx->error = X509_V_ERR_INVALID_PURPOSE;
+          X509_STORE_CTX_set_error(ctx, X509_V_ERR_INVALID_PURPOSE);
           return 0;
         }
     }
@@ -482,15 +456,15 @@ tls_session_verify(TLSSession *self, int ok, X509_STORE_CTX *ctx)
   if (X509_STORE_CTX_get1_issuer(&issuer_cert, ctx, client_cert)!=1)
     {
       msg_error("Failed to get issuer certificate for verification", NULL);
-      ctx->error = X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT;
+      X509_STORE_CTX_set_error(ctx, X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT);
       return 0;
     }
   else
     {
-      if (ok && (ocsp_check(ctx->ctx, issuer_cert, client_cert) == OCSP_INVALID))
+      if (ok && (ocsp_check(X509_STORE_CTX_get0_store(ctx), issuer_cert, client_cert) == OCSP_INVALID))
         {
           msg_error("OCSP check failed", NULL);
-          ctx->error = X509_V_ERR_CERT_REVOKED;
+          X509_STORE_CTX_set_error(ctx, X509_V_ERR_CERT_REVOKED);
           return 0;
         }
     }
