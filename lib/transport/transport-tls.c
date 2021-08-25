@@ -109,7 +109,7 @@ log_transport_tls_write_method(LogTransport *s, const gpointer buf, gsize buflen
 #ifdef ATL_CHANGE
   GString *subject_name;
   X509* peer_cert;
-  int old_state = SSL_get_state(self->tls_session->ssl);
+  OSSL_HANDSHAKE_STATE old_state = SSL_get_state(self->tls_session->ssl);
 #endif
 
   /* assume that we need to poll our output for writing unless
@@ -121,7 +121,7 @@ log_transport_tls_write_method(LogTransport *s, const gpointer buf, gsize buflen
 
 #ifdef ATL_CHANGE
   /* If we are transitioning to a connected state then output a syslog */
-  if ((SSL_ST_OK != old_state) && (SSL_ST_OK == SSL_get_state(self->tls_session->ssl)))
+  if ((TLS_ST_OK != old_state) && (TLS_ST_OK == SSL_get_state(self->tls_session->ssl)))
     {
       subject_name = g_string_sized_new(128);
       peer_cert = SSL_get_peer_certificate(self->tls_session->ssl);

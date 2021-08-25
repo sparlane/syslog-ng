@@ -648,7 +648,7 @@ tls_session_free(TLSSession *self)
   int state = SSL_get_state(self->ssl);
 
   /* If we are transitioning from a good state then output a syslog */
-  if (SSL_ST_ERR != state)
+  if (strcmp (SSL_state_string (self->ssl), "SSLERR") != 0)
     {
       subject_name = g_string_sized_new(128);
       peer_cert = SSL_get_peer_certificate(self->ssl);
