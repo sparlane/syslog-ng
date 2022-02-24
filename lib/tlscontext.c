@@ -657,6 +657,7 @@ tls_session_free(TLSSession *self)
         {
           tls_x509_format_dn(X509_get_subject_name(peer_cert), subject_name);
           msg_notice ("TLS session ended", evt_tag_str("session", subject_name->str));
+          X509_free (peer_cert);
         }
       g_string_free(subject_name, TRUE);
     }

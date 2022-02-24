@@ -136,6 +136,7 @@ log_transport_tls_write_method(LogTransport *s, const gpointer buf, gsize buflen
       if(peer_cert)
         {
           tls_x509_format_dn(X509_get_subject_name(peer_cert), subject_name);
+          X509_free (peer_cert);
         }
       else
         {
