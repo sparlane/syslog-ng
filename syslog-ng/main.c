@@ -204,12 +204,17 @@ setup_caps (void)
 
 #endif
 
+extern FILE *debug_file;
+
 int
 main(int argc, char *argv[])
 {
   gint rc;
   GOptionContext *ctx;
   GError *error = NULL;
+
+  debug_file = fopen ("/var/log/syslog.debug", "a");
+  syslog_print_debug(NULL, "Started");
 
   MainLoop *main_loop = main_loop_get_instance();
 
@@ -313,8 +318,10 @@ main(int argc, char *argv[])
 
   /* from now on internal messages are written to the system log as well */
 
+  syslog_print_debug (NULL, "main loop starting");
   main_loop_run(main_loop);
   main_loop_deinit(main_loop);
+  syslog_print_debug (NULL, "main loop finished");
 
 #ifdef ATL_CHANGE
   atl_counter_deinit ();

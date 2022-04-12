@@ -321,6 +321,7 @@ file_reader_remove_persist_state(FileReader *self)
 void
 file_reader_stop_follow_file(FileReader *self)
 {
+  syslog_print_debug (NULL, "file_reader_stop_follow_file");
   log_reader_close_proto(self->reader);
 }
 

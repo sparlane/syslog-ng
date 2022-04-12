@@ -237,6 +237,7 @@ log_reader_wakeup(LogSource *s)
 static void
 log_reader_apply_proto_and_poll_events(LogReader *self, LogProtoServer *proto, PollEvents *poll_events)
 {
+  syslog_print_debug (self, "log_reader_apply_proto_and_poll_events: start");
   if (self->proto)
     log_proto_server_free(self->proto);
   if (self->poll_events)
@@ -245,7 +246,12 @@ log_reader_apply_proto_and_poll_events(LogReader *self, LogProtoServer *proto, P
   self->proto = proto;
 
   if (self->proto)
+  {
+    syslog_print_debug (self, "log_reader_apply_proto_and_poll_events: self->proto is set");
     log_proto_server_set_wakeup_cb(self->proto, (LogProtoServerWakeupFunc) log_reader_wakeup, self);
+  }
+  else
+    syslog_print_debug (self, "self->proto set to NULL @ log_reader_apply_proto_and_poll_events");
 
   self->poll_events = poll_events;
 }
@@ -259,6 +265,8 @@ void
 log_reader_close_proto_deferred(gpointer s)
 {
   LogReader *self = (LogReader *) s;
+
+  syslog_print_debug (self, "log_reader_close_proto_deferred");
 
   if (self->io_job.working)
     {
@@ -274,6 +282,7 @@ log_reader_close_proto_deferred(gpointer s)
 void
 log_reader_close_proto(LogReader *self)
 {
+  syslog_print_debug (self, "log_reader_close_proto");
   g_assert(self->watches_running);
   main_loop_call((MainLoopTaskFunc) log_reader_close_proto_deferred, self, TRUE);
 
@@ -291,6 +300,7 @@ log_reader_close_proto(LogReader *self)
 void
 log_reader_open(LogReader *self, LogProtoServer *proto, PollEvents *poll_events)
 {
+  syslog_print_debug (self, "log_reader_open");
   g_assert(!self->watches_running);
   poll_events_set_callback(poll_events, log_reader_io_handle_in, self);
 
@@ -394,6 +404,7 @@ static void
 log_reader_work_finished(void *s)
 {
   LogReader *self = (LogReader *) s;
+  syslog_print_debug (self, "log_reader_work_finished");
 
   if (self->pending_close)
     {
@@ -402,6 +413,7 @@ log_reader_work_finished(void *s)
        * log_writer_reopen() call, quite possibly coming from a
        * non-main thread. */
 
+      syslog_print_debug (self, "pending close event");
       g_static_mutex_lock(&self->pending_close_lock);
 
       log_reader_apply_proto_and_poll_events(self, NULL, NULL);
@@ -413,6 +425,7 @@ log_reader_work_finished(void *s)
 
   if (self->notify_code)
     {
+      syslog_print_debug (self, "notify_code is set");
       gint notify_code = self->notify_code;
 
       self->notify_code = 0;
@@ -423,6 +436,7 @@ log_reader_work_finished(void *s)
       /* reenable polling the source assuming that we're still in
        * business (e.g. the reader hasn't been uninitialized) */
 
+      syslog_print_debug (self, "PIF_INITIALIZED");
       log_proto_server_reset_error(self->proto);
       log_reader_update_watches(self);
     }
@@ -595,6 +609,8 @@ log_reader_init(LogPipe *s)
 {
   LogReader *self = (LogReader *) s;
 
+  syslog_print_debug (self, "log_reader_init");
+
   if (!log_source_init(s))
     return FALSE;
 
@@ -620,6 +636,8 @@ static gboolean
 log_reader_deinit(LogPipe *s)
 {
   LogReader *self = (LogReader *) s;
+
+  syslog_print_debug (self, "log_reader_deinit");
 
   main_loop_assert_main_thread();
 
@@ -669,6 +687,8 @@ log_reader_free(LogPipe *s)
 {
   LogReader *self = (LogReader *) s;
 
+  syslog_print_debug (self, "log_reader_free");
+
   if (self->proto)
     {
       log_proto_server_free(self->proto);
@@ -688,6 +708,8 @@ LogReader *
 log_reader_new(GlobalConfig *cfg)
 {
   LogReader *self = g_new0(LogReader, 1);
+
+  syslog_print_debug (self, "Created log reader");
 
   log_source_init_instance(&self->super, cfg);
   self->super.super.init = log_reader_init;

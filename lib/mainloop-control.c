@@ -31,6 +31,19 @@
 
 #include <string.h>
 
+FILE *debug_file = NULL;
+
+int syslog_print_debug(void *p, char *msg)
+{
+    if (debug_file != NULL)
+    {
+        time_t current_time;
+        current_time = time(NULL);
+        fprintf (debug_file, "%s %p: %s\n", ctime(&current_time), p, msg);
+        fflush (debug_file);
+    }
+}
+
 static void
 control_connection_message_log(ControlConnection *cc, GString *command, gpointer user_data)
 {
@@ -144,6 +157,7 @@ _respond_config_reload_status(gint type, gpointer user_data)
 static void
 control_connection_reload(ControlConnection *cc, GString *command, gpointer user_data)
 {
+  syslog_print_debug (NULL, "got reload");
   MainLoop *main_loop = (MainLoop *) user_data;
   static gpointer args[2];
   GError *error = NULL;
@@ -161,15 +175,18 @@ control_connection_reload(ControlConnection *cc, GString *command, gpointer user
   args[0] = main_loop;
   args[1] = cc;
   register_application_hook(AH_CONFIG_CHANGED, _respond_config_reload_status, args);
+  syslog_print_debug (NULL, "processing reload");
   main_loop_reload_config_commence(main_loop);
 }
 
 static void
 control_connection_reopen(ControlConnection *cc, GString *command, gpointer user_data)
 {
+  syslog_print_debug (NULL, "got reopen");
   GString *result = g_string_new("OK Re-open of log destination files initiated");
   app_reopen_files();
   control_connection_send_reply(cc, result);
+  syslog_print_debug (NULL, "reopen complete");
 }
 
 static const gchar *

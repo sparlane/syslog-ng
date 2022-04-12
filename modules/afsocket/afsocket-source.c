@@ -443,6 +443,8 @@ afsocket_sd_close_connection(AFSocketSourceDriver *self, AFSocketSourceConnectio
                 evt_tag_str("client", g_sockaddr_format(sc->peer_addr, buf1, sizeof(buf1), GSA_FULL)),
                 evt_tag_str("local", g_sockaddr_format(self->bind_addr, buf2, sizeof(buf2), GSA_FULL)));
 
+  syslog_print_debug (NULL, "afsocket_sd_close_connection");
+  syslog_print_debug (NULL, sc->peer_addr->sa.sa_family == AF_UNIX ? "UNIX" : "Other");
   log_reader_close_proto(sc->reader);
   log_pipe_deinit(&sc->super);
   self->connections = g_list_remove(self->connections, sc);
