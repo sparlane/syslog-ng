@@ -423,10 +423,7 @@ log_reader_work_finished(void *s)
       /* reenable polling the source assuming that we're still in
        * business (e.g. the reader hasn't been uninitialized) */
 
-      if (self->proto)
-      {
-          log_proto_server_reset_error(self->proto);
-      }
+      log_proto_server_reset_error(self->proto);
       log_reader_update_watches(self);
     }
 }
